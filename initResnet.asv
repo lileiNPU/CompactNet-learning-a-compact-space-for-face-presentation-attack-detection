@@ -1,0 +1,494 @@
+function model = initResnet4Generator(active_mode, res_block)
+conv_gen_counter = 0;
+map_gen_counter = 1;
+relu_gen_counter = 0;
+sigmoid_gen_counter = 0;
+tanh_gen_counter = 0;
+upsample_gen_counter = 0;
+substract_vgg_counter = 0;
+eucdisloss_vgg_counter = 0;
+scale_counter = 0;
+batchNorm_counter = 0;
+linear_counter = 0;
+eraser_params = {};
+model =  dagnn.DagNN();
+
+
+
+
+
+conv_gen_counter = 0;
+map_gen_counter = 1;
+relu_gen_counter = 0;
+sigmoid_gen_counter = 0;
+tanh_gen_counter = 0;
+upsample_gen_counter = 0;
+substract_vgg_counter = 0;
+eucdisloss_vgg_counter = 0;
+scale_counter = 0;
+batchNorm_counter = 0;
+linear_counter = 0;
+eraser_params = {};
+model =  dagnn.DagNN();
+
+
+genLayer = 7;
+for d = 1 : genLayer
+    % conv²ã
+    params = {};
+    if d == 1
+        convBlock = dagnn.Conv('size', [3, 3, 3, 64], 'hasBias', true);
+    else
+        convBlock = dagnn.Conv('size', [3, 3, 64, 64], 'hasBias', true);
+    end
+    convBlock.pad = 0;%[1 1 1 1];
+    convBlock.stride = 1;
+    conv_gen_counter = conv_gen_counter + 1;
+    if d == 1
+        model.addLayer(['gen_conv_gen_',num2str(conv_gen_counter)], convBlock, {'input_pad'}, {['map_gen_', num2str(map_gen_counter + 1)]}, ...
+            {['gen_filters', num2str(conv_gen_counter)], ['gen_biases', num2str(conv_gen_counter)]});
+    else
+        model.addLayer(['gen_conv_gen_',num2str(conv_gen_counter)], convBlock, {['map_gen_', num2str(map_gen_counter)]}, {['map_gen_', num2str(map_gen_counter + 1)]}, ...
+            {['gen_filters', num2str(conv_gen_counter)], ['gen_biases', num2str(conv_gen_counter)]});
+    end
+    p = model.getParamIndex(model.layers(end).params) ;
+    params = model.layers(end).block.initParams();
+    [model.params(p).value] = deal(params{:});
+    map_gen_counter = map_gen_counter + 1;
+    
+    if bn == 1
+        % batchNorm Layer
+        ndim = size(params{1}, 4);
+        batchNorm_counter = batchNorm_counter + 1;
+        batchnormBlock = dagnn.BatchNorm();
+        batchnormBlock.numChannels = ndim;
+        params = initParams(batchnormBlock);
+        model.addLayer(['batchNorm_',num2str(batchNorm_counter)], batchnormBlock, {['map_gen_', num2str(map_gen_counter)]}, {['map_gen_', num2str(map_gen_counter + 1)]}, ...
+            {['norm_weights', num2str(batchNorm_counter)], ['norm_biases', num2str(batchNorm_counter)], ['trainMethod', num2str(batchNorm_counter)]});
+        p = model.getParamIndex(model.layers(end).params) ;
+        [model.params(p).value] = deal(params{:});
+        map_gen_counter = map_gen_counter + 1;
+    end
+    
+    if strcmp(active_mode, 'relu')
+        % Relu²ã
+        relu_gen_counter = relu_gen_counter + 1;
+        reluBlock = dagnn.ReLU();
+        reluBlock.leak = 0.25;
+        model.addLayer(['gen_relu_gen_',num2str(relu_gen_counter)], reluBlock, {['map_gen_', num2str(map_gen_counter)]}, {['map_gen_', num2str(map_gen_counter + 1)]});
+        map_gen_counter = map_gen_counter + 1;
+    end
+    if strcmp(active_mode, 'sigmoid')
+        % Sigmoid²ã
+        sigmoid_gen_counter = sigmoid_gen_counter + 1;
+        sigmoidBlock = dagnn.Sigmoid();
+        model.addLayer(['gen_sigmoid_gen_',num2str(sigmoid_gen_counter)], sigmoidBlock, {['map_gen_', num2str(map_gen_counter)]}, {['map_gen_', num2str(map_gen_counter + 1)]});
+        map_gen_counter = map_gen_counter + 1;
+    end
+    if strcmp(active_mode, 'tanh')
+        % Tanh²ã
+        tanh_gen_counter = tanh_gen_counter + 1;
+        tanhBlock = dagnn.Tanh();
+        model.addLayer(['gen_tanh_gen_',num2str(tanh_gen_counter)], tanhBlock, {['map_gen_', num2str(map_gen_counter)]}, {['map_gen_', num2str(map_gen_counter + 1)]});
+        map_gen_counter = map_gen_counter + 1;
+    end
+end
+
+%% upsample
+upsample_gen_counter = upsample_gen_counter + 1;
+upsampleBlock = dagnn.Upsample();
+model.addLayer(['gen_upsample_gen_',num2str(upsample_gen_counter)], upsampleBlock, {['map_gen_', num2str(map_gen_counter)]}, {['map_gen_', num2str(map_gen_counter + 1)]});
+map_gen_counter = map_gen_counter + 1;
+
+%% conv 6
+params = {};
+convBlock = dagnn.Conv('size', [3, 3, 64, 64], 'hasBias', true);
+convBlock.pad = [1 1 1 1];
+convBlock.stride = 1;
+conv_gen_counter = conv_gen_counter + 1;
+model.addLayer(['gen_conv_gen_', num2str(conv_gen_counter)], convBlock, {['map_gen_', num2str(map_gen_counter)]}, {['map_gen_', num2str(map_gen_counter + 1)]}, ...
+              {['gen_filters', num2str(conv_gen_counter)], ['gen_biases', num2str(conv_gen_counter)]});
+p = model.getParamIndex(model.layers(end).params) ;
+params = model.layers(end).block.initParams();
+[model.params(p).value] = deal(params{:});
+map_gen_counter = map_gen_counter + 1;
+
+%% relu
+relu_gen_counter = relu_gen_counter + 1;
+reluBlock = dagnn.ReLU();
+model.addLayer(['gen_relu_gen_',num2str(relu_gen_counter)], reluBlock, {['map_gen_', num2str(map_gen_counter)]}, {['map_gen_', num2str(map_gen_counter + 1)]});
+map_gen_counter = map_gen_counter + 1;
+
+%% upsample
+upsample_gen_counter = upsample_gen_counter + 1;
+upsampleBlock = dagnn.Upsample();
+model.addLayer(['gen_upsample_gen_',num2str(upsample_gen_counter)], upsampleBlock, {['map_gen_', num2str(map_gen_counter)]}, {['map_gen_', num2str(map_gen_counter + 1)]});
+map_gen_counter = map_gen_counter + 1;
+
+%% conv 7
+params = {};
+convBlock = dagnn.Conv('size', [3, 3, 64, 64], 'hasBias', true);
+convBlock.pad = [1 1 1 1];
+convBlock.stride = 1;
+conv_gen_counter = conv_gen_counter + 1;
+model.addLayer(['gen_conv_gen_', num2str(conv_gen_counter)], convBlock, {['map_gen_', num2str(map_gen_counter)]}, {['map_gen_', num2str(map_gen_counter + 1)]}, ...
+              {['gen_filters', num2str(conv_gen_counter)], ['gen_biases', num2str(conv_gen_counter)]});
+p = model.getParamIndex(model.layers(end).params) ;
+params = model.layers(end).block.initParams();
+[model.params(p).value] = deal(params{:});
+map_gen_counter = map_gen_counter + 1;
+
+%% relu
+relu_gen_counter = relu_gen_counter + 1;
+reluBlock = dagnn.ReLU();
+model.addLayer(['gen_relu_gen_',num2str(relu_gen_counter)], reluBlock, {['map_gen_', num2str(map_gen_counter)]}, {['map_gen_', num2str(map_gen_counter + 1)]});
+map_gen_counter = map_gen_counter + 1;
+
+%% 8
+% conv²ã 11
+params = {};
+convBlock = dagnn.Conv('size', [1, 1, 64, 3], 'hasBias', true);
+convBlock.pad = 0;%[1 1 1 1];
+convBlock.stride = 1;
+conv_gen_counter = conv_gen_counter + 1;
+model.addLayer(['gen_conv_gen_',num2str(conv_gen_counter)], convBlock, {['map_gen_', num2str(map_gen_counter)]}, {'map_gen'}, ...
+    {['gen_filters', num2str(conv_gen_counter)], ['gen_biases', num2str(conv_gen_counter)]});
+p = model.getParamIndex(model.layers(end).params) ;
+params = model.layers(end).block.initParams();
+[model.params(p).value] = deal(params{:});
+map_gen_counter = map_gen_counter + 1;
+
+% % Sigmoid²ã
+% sigmoid_gen_counter = sigmoid_gen_counter + 1;
+% sigmoidBlock = dagnn.Sigmoid();
+% model.addLayer(['sigmoid_gen_',num2str(sigmoid_gen_counter)], sigmoidBlock, {['map_gen_', num2str(map_gen_counter)]}, {'map_gen'});
+
+%% VGG paramaters
+vgg_layer_select = {'pool2', 'pool5'};
+vgg_conv_counter = 0;
+vgg_relu_counter = 0;
+vgg_linear_counter = 0;
+vgg_pool_counter = 0;
+vgg_map_counter = 0;
+vgg_output = {};
+scale = 1;%255;
+% average_vgg = VGG_19.meta.normalization.averageImage;
+% average_vgg = reshape(average_vgg, [1 numel(average_vgg)]);
+average_vgg = [0, 0, 0];
+%% linearScale for map_gen
+scale_counter = scale_counter + 1;
+linearvggBlock = dagnn.LinearVGG();
+linearvggBlock.scale = scale;
+linearvggBlock.average = average_vgg;
+model.addLayer(['vgg_scale_',num2str(scale_counter)], linearvggBlock, {'map_gen'}, {'map_gen_scale_1'});
+
+for vl = 1 : length(VGG_19.layers)
+    layer = VGG_19.layers(vl);
+    layer_name = layer{1}.name;
+    layer_type = layer{1}.type;
+    
+    if strcmp(layer_type, 'conv')
+        vgg_conv_counter = vgg_conv_counter + 1;
+        params = {};
+        convBlock = dagnn.Conv('size', layer{1}.size, 'hasBias', true);
+        convBlock.pad = layer{1}.pad;
+        convBlock.stride = layer{1}.stride;
+        if vl == 1
+            model.addLayer(['vgg_conv_',num2str(vgg_conv_counter)], convBlock, {'map_gen_scale_1'}, {['vgg_', num2str(vgg_map_counter + 1)]}, ...
+                {['vgg_filters', num2str(vgg_conv_counter)], ['vgg_biases', num2str(vgg_conv_counter)]});
+        else
+            model.addLayer(['vgg_conv_',num2str(vgg_conv_counter)], convBlock, {['vgg_', num2str(vgg_map_counter)]}, {['vgg_', num2str(vgg_map_counter + 1)]}, ...
+                {['vgg_filters', num2str(vgg_conv_counter)], ['vgg_biases', num2str(vgg_conv_counter)]});
+        end
+        p = model.getParamIndex(model.layers(end).params) ;
+        params = layer{1}.weights;
+        [model.params(p).value] = deal(params{:});
+        vgg_map_counter = vgg_map_counter + 1;
+        if isempty(eraser_params)
+            eraser_params{1} = ['vgg_filters', num2str(vgg_conv_counter)];
+            eraser_params{end + 1} = ['vgg_biases', num2str(vgg_conv_counter)];
+        else
+            eraser_params{end + 1} = ['vgg_filters', num2str(vgg_conv_counter)];
+            eraser_params{end + 1} = ['vgg_biases', num2str(vgg_conv_counter)];
+        end
+    end
+    if strcmp(layer_type, 'relu')
+        vgg_relu_counter = vgg_relu_counter + 1;
+        reluBlock = dagnn.ReLU();
+        reluBlock.leak = layer{1}.leak;
+        model.addLayer(['vgg_relu_',num2str(vgg_relu_counter)], reluBlock, {['vgg_', num2str(vgg_map_counter)]}, {['vgg_', num2str(vgg_map_counter + 1)]});
+        vgg_map_counter = vgg_map_counter + 1;
+    end
+    if strcmp(layer_type, 'Linear')
+        vgg_linear_counter = vgg_linear_counter + 1;
+        linearBlock = dagnn.LinearFunc();
+        linearBlock.scale = layer{1}.scale;
+        model.addLayer(['vgg_linear_',num2str(vgg_linear_counter)], linearBlock, {['vgg_', num2str(vgg_map_counter)]}, {['vgg_', num2str(vgg_map_counter + 1)]});
+        vgg_map_counter = vgg_map_counter + 1;
+    end
+    if strcmp(layer_type, 'pool')
+        vgg_pool_counter = vgg_pool_counter + 1;
+        poolBlock = dagnn.Pooling();
+        poolBlock.method = layer{1}.method;
+        poolBlock.stride = layer{1}.stride;
+        poolBlock.pad = layer{1}.pad;
+        poolBlock.poolSize = layer{1}.pool;
+        poolBlock.opts = layer{1}.opts ;
+        model.addLayer(['vgg_pool_',num2str(vgg_pool_counter)], poolBlock, {['vgg_', num2str(vgg_map_counter)]}, {['vgg_', num2str(vgg_map_counter + 1)]});
+        vgg_map_counter = vgg_map_counter + 1;
+    end
+    if ismember(layer_name, vgg_layer_select)
+        if isempty(vgg_output)
+            vgg_output{1} = ['vgg_', num2str(vgg_map_counter)];
+        else
+            vgg_output{end + 1} = ['vgg_', num2str(vgg_map_counter)];
+        end
+    end
+    if strcmp(layer_name, vgg_layer_select{end})
+        break;
+    end
+end
+
+
+%% linearScale for label
+scale_counter = scale_counter + 1;
+linearvggBlock = dagnn.LinearVGG();
+linearvggBlock.scale = scale;
+linearvggBlock.average = average_vgg;
+model.addLayer(['vgg_scale_',num2str(scale_counter)], linearvggBlock, {'label'}, {'map_label_scale'});
+
+for vl = 1 : length(VGG_19.layers)
+    layer = VGG_19.layers(vl);
+    layer_name = layer{1}.name;
+    layer_type = layer{1}.type;
+    
+    if strcmp(layer_type, 'conv')
+        vgg_conv_counter = vgg_conv_counter + 1;
+        params = {};
+        convBlock = dagnn.Conv('size', layer{1}.size, 'hasBias', true);
+        convBlock.pad = layer{1}.pad;
+        convBlock.stride = layer{1}.stride;
+        if vl == 1
+            model.addLayer(['vgg_conv_',num2str(vgg_conv_counter)], convBlock, {'map_label_scale'}, {['vgg_', num2str(vgg_map_counter + 1)]}, ...
+                {['vgg_filters', num2str(vgg_conv_counter)], ['vgg_biases', num2str(vgg_conv_counter)]});
+        else
+            model.addLayer(['vgg_conv_',num2str(vgg_conv_counter)], convBlock, {['vgg_', num2str(vgg_map_counter)]}, {['vgg_', num2str(vgg_map_counter + 1)]}, ...
+                {['vgg_filters', num2str(vgg_conv_counter)], ['vgg_biases', num2str(vgg_conv_counter)]});
+        end
+        p = model.getParamIndex(model.layers(end).params) ;
+        params = layer{1}.weights;
+        [model.params(p).value] = deal(params{:});
+        vgg_map_counter = vgg_map_counter + 1;
+        if isempty(eraser_params)
+            eraser_params{1} = ['vgg_filters', num2str(vgg_conv_counter)];
+            eraser_params{end + 1} = ['vgg_biases', num2str(vgg_conv_counter)];
+        else
+            eraser_params{end + 1} = ['vgg_filters', num2str(vgg_conv_counter)];
+            eraser_params{end + 1} = ['vgg_biases', num2str(vgg_conv_counter)];
+        end
+    end
+    if strcmp(layer_type, 'relu')
+        vgg_relu_counter = vgg_relu_counter + 1;
+        reluBlock = dagnn.ReLU();
+        reluBlock.leak = layer{1}.leak;
+        model.addLayer(['vgg_relu_',num2str(vgg_relu_counter)], reluBlock, {['vgg_', num2str(vgg_map_counter)]}, {['vgg_', num2str(vgg_map_counter + 1)]});
+        vgg_map_counter = vgg_map_counter + 1;
+    end
+    if strcmp(layer_type, 'pool')
+        vgg_pool_counter = vgg_pool_counter + 1;
+        poolBlock = dagnn.Pooling();
+        poolBlock.method = layer{1}.method;
+        poolBlock.stride = layer{1}.stride;
+        poolBlock.pad = layer{1}.pad;
+        poolBlock.poolSize = layer{1}.pool;
+        poolBlock.opts = layer{1}.opts ;
+        model.addLayer(['vgg_pool_',num2str(vgg_pool_counter)], poolBlock, {['vgg_', num2str(vgg_map_counter)]}, {['vgg_', num2str(vgg_map_counter + 1)]});
+        vgg_map_counter = vgg_map_counter + 1;
+    end
+    if ismember(layer_name, vgg_layer_select)
+        if isempty(vgg_output)
+            vgg_output{1} = ['vgg_', num2str(vgg_map_counter)];
+        else
+            vgg_output{end + 1} = ['vgg_', num2str(vgg_map_counter)];
+        end
+    end
+    if strcmp(layer_name, vgg_layer_select{end})
+        break;
+    end
+end
+
+vgg_loss = {};
+for s = 1 : length(vgg_output) / 2
+    % substract Layer
+    substract_vgg_counter = substract_vgg_counter + 1;
+    substract_input = {vgg_output{s}, vgg_output{(length(vgg_output) / 2) + s}};
+    substractBlock = dagnn.Substract();
+    model.addLayer(['vgg_substract_', num2str(substract_vgg_counter)], substractBlock, substract_input, {['vgg_', num2str(vgg_map_counter + 1)]});
+    if isempty(vgg_loss)
+        vgg_loss{1} = ['vgg_', num2str(vgg_map_counter + 1)];
+    else
+        vgg_loss{end + 1} = ['vgg_', num2str(vgg_map_counter + 1)];
+    end
+    vgg_map_counter = vgg_map_counter + 1;
+end
+
+
+vgg_objective = {};
+for vl = 1 : length(vgg_loss)
+    % loss Layer
+    eucdisloss_vgg_counter = eucdisloss_vgg_counter + 1;
+    losseucdisBlock = dagnn.LossEucDis() ;
+    model.addLayer(['vgg_eucdisloss_', num2str(eucdisloss_vgg_counter)], losseucdisBlock, {vgg_loss{vl}}, {['vgg_objective_', num2str(vl)]});
+    if isempty(vgg_objective)
+        vgg_objective{1} = ['vgg_objective_', num2str(vl)];
+    else
+        vgg_objective{end + 1} = ['vgg_objective_', num2str(vl)];
+    end
+    vgg_map_counter = vgg_map_counter + 1;
+end
+
+% %% sum Layer
+% sumBlock = dagnn.Sum() ;
+% model.addLayer('sum_VGG_objective', sumBlock, vgg_objective, {'objective'});
+
+%% Discriminative network
+conv_dis_counter = 0;
+map_dis_counter = 0;
+relu_dis_counter = 0;
+sigmoid_dis_counter = 0;
+tanh_dis_counter = 0;
+flatten_dis_counter = 0;
+batchNorm_counter = 0;
+linear_dis_counter = 0;
+log_dis_counter = 0;
+
+%% linearScale for map_gen
+scale_counter = scale_counter + 1;
+linearvggBlock = dagnn.LinearVGG();
+linearvggBlock.scale = scale;
+linearvggBlock.average = average_vgg;
+model.addLayer(['dis_scale_for_gen_',num2str(scale_counter)], linearvggBlock, {'map_gen'}, {'map_gen_scale_2'});
+
+disLayer = 5;
+for d = 1 : disLayer
+    % conv²ã
+    params = {};
+    if d == 1
+        convBlock = dagnn.Conv('size', [3, 3, 3, 64], 'hasBias', true);
+    else
+        convBlock = dagnn.Conv('size', [3, 3, 64, 64], 'hasBias', true);
+    end
+    convBlock.pad = [1 1 1 1];
+    convBlock.stride = 2;
+    conv_dis_counter = conv_dis_counter + 1;
+    if d == 1
+        model.addLayer(['dis_conv_for_gen_',num2str(conv_dis_counter)], convBlock, {'map_gen_scale_2'}, {['map_dis_for_gen_', num2str(map_dis_counter + 1)]}, ...
+            {['dis_filters_for_gen_', num2str(conv_dis_counter)], ['dis_biases_for_gen_', num2str(conv_dis_counter)]});
+    else
+        model.addLayer(['dis_conv_for_gen_',num2str(conv_dis_counter)], convBlock, {['map_dis_for_gen_', num2str(map_dis_counter)]}, {['map_dis_for_gen_', num2str(map_dis_counter + 1)]}, ...
+            {['dis_filters_for_gen_', num2str(conv_dis_counter)], ['dis_biases_for_gen_', num2str(conv_dis_counter)]});
+    end
+    p = model.getParamIndex(model.layers(end).params) ;
+    params = model.layers(end).block.initParams();
+    [model.params(p).value] = deal(params{:});
+    map_dis_counter = map_dis_counter + 1;
+    eraser_params{end + 1} = ['dis_filters_for_gen_', num2str(conv_dis_counter)];
+    eraser_params{end + 1} = ['dis_biases_for_gen_', num2str(conv_dis_counter)];
+            
+    if bn == 1
+        % batchNorm Layer
+        ndim = size(params{1}, 4);
+        batchNorm_counter = batchNorm_counter + 1;
+        batchnormBlock = dagnn.BatchNorm();
+        batchnormBlock.numChannels = ndim;
+        params = initParams(batchnormBlock);
+        model.addLayer(['batchNorm_',num2str(batchNorm_counter)], batchnormBlock, {['map_dis_for_gen_', num2str(map_dis_counter)]}, {['map_dis_for_gen_', num2str(map_dis_counter + 1)]}, ...
+            {['norm_weights', num2str(batchNorm_counter)], ['norm_biases', num2str(batchNorm_counter)], ['trainMethod', num2str(batchNorm_counter)]});
+        p = model.getParamIndex(model.layers(end).params) ;
+        [model.params(p).value] = deal(params{:});
+        map_dis_counter = map_dis_counter + 1;
+    end
+    
+    if strcmp(active_mode, 'relu')
+        % Relu²ã
+        relu_dis_counter = relu_dis_counter + 1;
+        reluBlock = dagnn.ReLU();
+        reluBlock.leak = 0.25;
+        model.addLayer(['dis_relu_for_gen_',num2str(relu_dis_counter)], reluBlock, {['map_dis_for_gen_', num2str(map_dis_counter)]}, {['map_dis_for_gen_', num2str(map_dis_counter + 1)]});
+        map_dis_counter = map_dis_counter + 1;
+    end
+    if strcmp(active_mode, 'sigmoid')
+        % Sigmoid²ã
+        sigmoid_dis_counter = sigmoid_dis_counter + 1;
+        sigmoidBlock = dagnn.Sigmoid();
+        model.addLayer(['dis_sigmoid_for_gen_',num2str(sigmoid_dis_counter)], sigmoidBlock, {['map_dis_for_gen_', num2str(map_dis_counter)]}, {['map_dis_for_gen_', num2str(map_dis_counter + 1)]});
+        map_dis_counter = map_dis_counter + 1;
+    end
+    if strcmp(active_mode, 'tanh')
+        % Tanh²ã
+        tanh_dis_counter = tanh_dis_counter + 1;
+        tanhBlock = dagnn.Tanh();
+        model.addLayer(['dis_tanh_for_gen_',num2str(tanh_dis_counter)], tanhBlock, {['map_dis_for_gen_', num2str(map_dis_counter)]}, {['map_dis_for_gen_', num2str(map_dis_counter + 1)]});
+        map_dis_counter = map_dis_counter + 1;
+    end
+end
+
+%% Flatten Layer
+flatten_dis_counter = flatten_dis_counter + 1;
+flattenBlock = dagnn.Flatten();
+model.addLayer(['dis_flatten_for_gen_',num2str(flatten_dis_counter)], flattenBlock, {['map_dis_for_gen_', num2str(map_dis_counter)]}, {['map_dis_for_gen_', num2str(map_dis_counter + 1)]});
+map_dis_counter = map_dis_counter + 1;
+
+%% FC Layer
+% conv²ã 11
+params = {};
+convBlock = dagnn.Conv('size', [1, 1, 3136, 1], 'hasBias', true);
+convBlock.pad = 0;%[1 1 1 1];
+convBlock.stride = 1;
+conv_dis_counter = conv_dis_counter + 1;
+model.addLayer(['dis_conv_for_gen_',num2str(conv_dis_counter)], convBlock, {['map_dis_for_gen_', num2str(map_dis_counter)]}, {['map_dis_for_gen_', num2str(map_dis_counter + 1)]}, ...
+    {['dis_filters_for_gen_', num2str(conv_dis_counter)], ['dis_biases_for_gen_', num2str(conv_dis_counter)]});
+p = model.getParamIndex(model.layers(end).params) ;
+params = model.layers(end).block.initParams();
+[model.params(p).value] = deal(params{:});
+map_dis_counter = map_dis_counter + 1;
+eraser_params{end + 1} = ['dis_filters_for_gen_', num2str(conv_dis_counter)];
+eraser_params{end + 1} = ['dis_biases_for_gen_', num2str(conv_dis_counter)];
+
+%% Sigmoid Layer
+sigmoid_dis_counter = sigmoid_dis_counter + 1;
+sigmoidBlock = dagnn.Sigmoid();
+model.addLayer(['dis_sigmoid_for_gen_',num2str(sigmoid_dis_counter)], sigmoidBlock, {['map_dis_for_gen_', num2str(map_dis_counter)]}, {['map_dis_for_gen_', num2str(map_dis_counter + 1)]});
+map_dis_counter = map_dis_counter + 1;
+
+%% Log layer
+log_dis_counter = log_dis_counter + 1;
+logBlock = dagnn.Log();
+model.addLayer(['dis_log_for_gen_',num2str(log_dis_counter)], logBlock, {['map_dis_for_gen_', num2str(map_dis_counter)]}, {['map_dis_for_gen_', num2str(map_dis_counter + 1)]});
+map_dis_counter = map_dis_counter + 1;
+
+%% Linear Layer
+linear_dis_counter = linear_dis_counter + 1;
+linearBlock = dagnn.LinearFunc();
+linearBlock.scale = -1;
+linearBlock.bias = 0;
+model.addLayer(['dis_linear_for_gen_',num2str(linear_dis_counter)], linearBlock, {['map_dis_for_gen_', num2str(map_dis_counter)]}, {'generate_objective'});
+
+% linearScale for loss
+vgg_layer_weight = [1e-0, 1e-0];
+vgg_objective_weight = {};
+for vo = 1 : length(vgg_objective)
+    linear_counter = linear_counter + 1;
+    inputs = vgg_objective{vo};
+    outputs = [inputs, '_weight'];
+    linearBlock = dagnn.LinearFunc();
+    linearBlock.scale = vgg_layer_weight(vo);
+    linearBlock.bias = 0;
+    model.addLayer(['vgg_lossweight_', num2str(linear_counter)], linearBlock, {inputs}, {outputs});
+    vgg_objective_weight{vo} = outputs;
+end
+
+%% sum Layer
+vgg_objective_weight{end + 1} = 'generate_objective';
+sumBlock = dagnn.Sum() ;
+model.addLayer('sum_vgg_gen_objective', sumBlock, vgg_objective_weight, {'objective'});
